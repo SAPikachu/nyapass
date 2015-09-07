@@ -1,13 +1,15 @@
 import asyncio
 import ssl
 import logging
-from socket import SHUT_RDWR
+import os
+import json
 
 from utils import pipe_data
 
 try:
     from asyncio import ensure_future
 except ImportError:
+    # Pre-Python 3.4
     from asyncio import async as ensure_future
 
 log = logging.getLogger("nyapass")
@@ -22,8 +24,9 @@ def safe_close(obj):
 
 
 class ConnectionHandler:
-    def __init__(self, request_handler):
+    def __init__(self, request_handler, config):
         self._request_handler = request_handler
+        self.config = config
         self.log = log.getChild(self.__class__.__name__)
         self.active_writers = []
 
@@ -59,13 +62,13 @@ class ConnectionHandler:
             self.active_writers.remove(bw)
 
 
-def nyapass_run(request_handler, host, port, listener_ssl_ctx=None):
+def nyapass_run(request_handler, config, listener_ssl_ctx=None):
     loop = asyncio.get_event_loop()
-    handler = ConnectionHandler(request_handler)
+    handler = ConnectionHandler(request_handler, config)
     coro = asyncio.start_server(
         handler.handle_connection,
-        host=host,
-        port=port,
+        host=config.listen_host,
+        port=config.port,
         loop=loop,
         ssl=listener_ssl_ctx,
     )
