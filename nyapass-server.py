@@ -5,11 +5,7 @@ import ssl
 import logging
 
 from utils import pipe_data
-
-try:
-    from asyncio import ensure_future
-except ImportError:
-    from asyncio import async as ensure_future
+from common import nyapass_run
 
 log = logging.getLogger("nyapass")
 
@@ -31,37 +27,14 @@ def is_authorized(request, writer):
 
 
 @asyncio.coroutine
-def handle_connection(reader, writer):
-    request = b""
+def handle_request(request, writer):
     br, bw = None, None
-    try:
-        while True:
-            line = yield from reader.readline()
-            request += line
-            if not line.strip():
-                break
-
-        if is_authorized(request, writer):
-            br, bw = yield from create_forwarder_backend()
-        else:
-            br, bw = yield from create_masq_backend()
-        bw.write(request)
-        tx_task = ensure_future(pipe_data(reader, bw))
-        rx_task = ensure_future(pipe_data(br, writer))
-        yield from asyncio.wait([tx_task, rx_task])
-    except ConnectionError as e:
-        log.debug("ConnectionError: %s", e)
-    finally:
-        try:
-            writer.close()
-        except Exception:
-            pass
-
-        try:
-            if bw:
-                bw.close()
-        except Exception:
-            pass
+    if is_authorized(request, writer):
+        br, bw = yield from create_forwarder_backend()
+    else:
+        br, bw = yield from create_masq_backend()
+    bw.write(request)
+    return br, bw
 
 
 def create_ssl_ctx():
@@ -79,23 +52,14 @@ def create_ssl_ctx():
 
 
 def main():
-    ctx = create_ssl_ctx()
-    loop = asyncio.get_event_loop()
-    coro = asyncio.start_server(handle_connection, "0.0.0.0", 8888, loop=loop, ssl=ctx)
-    server = loop.run_until_complete(coro)
-
-    # Serve requests until CTRL+c is pressed
-    print("Serving on {}".format(server.sockets[0].getsockname()))
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-
-    # Close the server
-    server.close()
-    loop.run_until_complete(server.wait_closed())
-    loop.close()
+    nyapass_run(
+        request_handler=handle_request,
+        host="0.0.0.0",
+        port=8888,
+        listener_ssl_ctx=create_ssl_ctx(),
+    )
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level="DEBUG")
     main()
