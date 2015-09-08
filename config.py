@@ -22,10 +22,15 @@ class Config:
         for k, v in converted_data.items():
             setattr(self, k, v)
 
+        self.generate_keys()
+
     def generate_keys(self):
         self.master_key = pbkdf2_hmac(
-            "sha512", self.password, self.salt, self.pbkdf2_rounds,
+            "sha512",
+            self.password.encode("utf-8"),
+            self.salt.encode("utf-8"),
+            self.pbkdf2_rounds,
         )
         self.signing_key = hmac.new(
-            self.master_key, "nyapass-signing-key", sha512,
+            self.master_key, b"nyapass-signing-key", sha512,
         ).digest()

@@ -7,6 +7,7 @@ import logging
 from utils import pipe_data
 from common import nyapass_run
 from config import Config
+from signature import unsign_headers, SignatureError
 
 log = logging.getLogger("nyapass")
 
@@ -30,17 +31,24 @@ class RequestHandler:
         return ret
 
 
-    def is_authorized(self, request, writer):
-        return b"X-Nyapass: cee85fee-9a98-4019-aa8c-7ee644fd74e3" in request
+    def try_unsign_readers(self, request):
+        try:
+            return unsign_headers(self.config, request)
+        except SignatureError as e:
+            log.debug("Unauthorized request: %s", repr(e))
+            return None
 
     @asyncio.coroutine
     def handle_request(self, request, writer):
         br, bw = None, None
-        if self.is_authorized(request, writer):
+        unsigned_request = self.try_unsign_readers(request)
+        if unsigned_request:
             br, bw = yield from self.create_forwarder_backend()
+            bw.write(unsigned_request)
         else:
             br, bw = yield from self.create_masq_backend()
-        bw.write(request)
+            bw.write(request)
+
         return br, bw
 
 

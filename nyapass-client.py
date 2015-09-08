@@ -6,6 +6,7 @@ import logging
 
 from common import nyapass_run
 from config import Config
+from signature import sign_headers, SignatureError
 
 log = logging.getLogger("nyapass")
 
@@ -25,8 +26,7 @@ class RequestHandler:
 
     @asyncio.coroutine
     def handle_request(self, request, writer):
-        request = request[:-2]
-        request += b"X-Nyapass: cee85fee-9a98-4019-aa8c-7ee644fd74e3\r\n\r\n"
+        request = sign_headers(self.config, request)
 
         br, bw = yield from self.connect_to_server()
         bw.write(request)
