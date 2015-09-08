@@ -66,7 +66,7 @@ def unsign_headers(config, headers):
     else:
         raise SignatureInvalid
 
-    return headers
+    return unsigned_headers + b"\r\n\r\n"
 
 
 if __name__ == "__main__":
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     test_headers = b"GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n"
     signed_headers = sign_headers(config, test_headers)
     print(signed_headers.decode("utf-8"))
-    unsign_headers(config, signed_headers)
+    assert unsign_headers(config, signed_headers) == test_headers
     try:
         unsign_headers(config, test_headers)
         assert False
