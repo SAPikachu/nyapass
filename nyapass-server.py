@@ -4,52 +4,29 @@ import asyncio
 import ssl
 import logging
 
-from utils import pipe_data
-from common import nyapass_run
+from common import nyapass_run, ConnectionHandler
 from config import Config
 from signature import unsign_headers, SignatureError
 
-log = logging.getLogger("nyapass")
 
-
-class RequestHandler:
-    def __init__(self, config):
-        self.config = config
-
-    @asyncio.coroutine
-    def create_masq_backend(self):
-        ret = yield from asyncio.open_connection(
-            self.config.masq_host, self.config.masq_port,
-        )
-        return ret
-
-    @asyncio.coroutine
-    def create_forwarder_backend(self):
-        ret = yield from asyncio.open_connection(
-            self.config.forwarder_host, self.config.forwarder_port,
-        )
-        return ret
-
-
+class ServerHandler(ConnectionHandler):
     def try_unsign_readers(self, request):
         try:
             return unsign_headers(self.config, request)
         except SignatureError as e:
-            log.debug("Unauthorized request: %s", repr(e))
+            self.debug("Unauthorized request: %s", repr(e))
             return None
 
     @asyncio.coroutine
-    def handle_request(self, request, writer):
-        br, bw = None, None
-        unsigned_request = self.try_unsign_readers(request)
-        if unsigned_request:
-            br, bw = yield from self.create_forwarder_backend()
-            bw.write(unsigned_request)
+    def process_request(self):
+        unsigned_headers = self.try_unsign_readers(self._local_headers)
+        if unsigned_headers:
+            self._local_headers = unsigned_headers
+            self.default_remote = \
+                self.config.forwarder_host, self.config.forwarder_port
         else:
-            br, bw = yield from self.create_masq_backend()
-            bw.write(request)
-
-        return br, bw
+            self.default_remote = \
+                self.config.masq_host, self.config.masq_port
 
 
 def create_ssl_ctx(config):
@@ -69,7 +46,7 @@ def create_ssl_ctx(config):
 def main(config):
     logging.basicConfig(level=config.log_level)
     nyapass_run(
-        request_handler=RequestHandler(config).handle_request,
+        handler_factory=ServerHandler,
         config=config,
         listener_ssl_ctx=create_ssl_ctx(config),
     )

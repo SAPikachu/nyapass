@@ -4,33 +4,35 @@ import asyncio
 import ssl
 import logging
 
-from common import nyapass_run
+from common import nyapass_run, ConnectionHandler
 from config import Config
-from signature import sign_headers, SignatureError
+from signature import sign_headers
 
-log = logging.getLogger("nyapass")
 
-class RequestHandler:
-    def __init__(self, config):
-        self.config = config
-        self._ssl_ctx = create_ssl_ctx(config)
-
-    @asyncio.coroutine
-    def connect_to_server(self):
-        ret = yield from asyncio.open_connection(
+class ClientHandler(ConnectionHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._ssl_ctx = create_ssl_ctx(self.config)
+        self.default_remote = (
             self.config.server_host,
             self.config.server_port,
-            ssl=self._ssl_ctx,
         )
-        return ret
 
     @asyncio.coroutine
-    def handle_request(self, request, writer):
-        request = sign_headers(self.config, request)
+    def process_request(self):
+        self._local_headers = sign_headers(
+            self.config,
+            self._local_headers,
+        )
 
-        br, bw = yield from self.connect_to_server()
-        bw.write(request)
-        return br, bw
+    @asyncio.coroutine
+    def connect_to_remote(self, remote, **kwargs):
+        kwargs["ssl"] = self._ssl_ctx
+        ret = yield from super().connect_to_remote(
+            remote,
+            **kwargs
+        )
+        return ret
 
 
 def create_ssl_ctx(config):
@@ -51,7 +53,7 @@ def create_ssl_ctx(config):
 def main(config):
     logging.basicConfig(level=config.log_level)
     nyapass_run(
-        request_handler=RequestHandler(config).handle_request,
+        handler_factory=ClientHandler,
         config=config,
     )
 
