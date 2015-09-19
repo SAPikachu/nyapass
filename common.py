@@ -409,11 +409,21 @@ class ConnectionHandler:
         remote = yield from self.get_remote()
         assert remote
 
-        if self._remote_conn and self.connected_remote_endpoint != remote:
-            self.debug("Destroying old connection to %s",
-                       self.connected_remote_endpoint)
-            self.destroy_remote_connection()
-            assert not self._remote_conn
+        if self._remote_conn:
+            recreate = False
+            if self.connected_remote_endpoint != remote:
+                recreate = True
+                self.debug("Destroying old connection to %s",
+                           self.connected_remote_endpoint)
+            else:
+                reader, _ = self._remote_conn
+                if reader.at_eof() or reader.exception():
+                    recreate = True
+                    self.debug("Recreating broken connection")
+
+            if recreate:
+                self.destroy_remote_connection()
+                assert not self._remote_conn
 
         if not self._remote_conn:
             yield from self.setup_remote_connection(remote)
