@@ -9,9 +9,10 @@ except ImportError:
 
 import logging
 import re
+from urllib.parse import urlparse
 
-HTTP_VERB_RE = re.compile(
-    b"^([A-Z]+) [^\r\n]+ [A-Z]+/[0-9].[0-9]\r\n",
+HTTP_REQUEST_RE = re.compile(
+    b"^([A-Z]+) ([^\r\n]+) [A-Z]+/[0-9].[0-9]\r\n",
     flags=re.S,
 )
 HTTP_STATUS_CODE_RE = re.compile(
@@ -26,10 +27,18 @@ HTTP_CONTENT_LENGTH_RE = re.compile(
     b"\r\nContent-Length:\\s*([^\r\n]*?)\\s*\r\n",
     flags=re.S | re.I,
 )
+HTTP_HOST_RE = re.compile(
+    b"\r\nHost:\\s*([^\r\n]*?)\\s*\r\n",
+    flags=re.S | re.I,
+)
 log = logging.getLogger("nyapass")
 
 
 class HttpProtocolError(ValueError):
+    pass
+
+
+class TerminateConnection(Exception):
     pass
 
 
@@ -123,11 +132,12 @@ def get_content_length(headers):
     if not m:
         return None
 
+    length_str = m.group(1).decode("utf-8")
     try:
-        return int(m.group(1))
+        return int(length_str)
     except (TypeError, ValueError) as e:
         raise HttpProtocolError(
-            "Invalid Content-Length: " + m.group(1),
+            "Invalid Content-Length: " + length_str,
         ) from e
 
 
@@ -209,7 +219,9 @@ class ConnectionHandler:
         monitor = ensure_future(self.monitor_remote_connection())
         yield from self.read_local_headers()
         monitor.cancel()
-        self.debug("Handling request (%s)", self.request_verb)
+        self.debug("Handling request (%s, %s)",
+                   self.request_verb,
+                   self.request_uri,)
         yield from self.process_request()
         yield from self.ensure_remote_connection()
         yield from asyncio.wait_for(asyncio.gather(
@@ -340,8 +352,7 @@ class ConnectionHandler:
         self._local_headers = yield from read_headers(self._reader)
         assert self.request_verb
 
-    @property
-    def request_verb(self):
+    def _request_re_match(self):
         headers = self._local_headers
         if not headers:
             return None
@@ -350,11 +361,39 @@ class ConnectionHandler:
             # Broken clients?
             headers = headers[2:]
 
-        m = HTTP_VERB_RE.match(headers)
+        m = HTTP_REQUEST_RE.match(headers)
         if not m:
             raise HttpProtocolError("Invalid HTTP request")
 
-        return m.group(1)
+        return m
+
+    @property
+    def request_verb(self):
+        m = self._request_re_match()
+        if m:
+            return m.group(1)
+
+    @property
+    def request_uri(self):
+        m = self._request_re_match()
+        if m:
+            return m.group(2)
+
+    @property
+    def request_hostname(self):
+        if not self._local_headers:
+            return None
+
+        uri = self.request_uri.decode("utf-8")
+        if self.request_verb == b"CONNECT":
+            return uri.split(":")[0]
+
+        if "://" not in uri:
+            m = HTTP_HOST_RE.search(self._local_headers)
+            return m.group(1).decode("utf-8") if m else None
+
+        parsed_uri = urlparse(uri)
+        return parsed_uri.hostname
 
     @property
     def response_code(self):
@@ -474,6 +513,8 @@ class Nyapass:
         self.active_handlers.append(handler)
         try:
             yield from handler.run()
+        except TerminateConnection:
+            pass
         except HttpProtocolError as e:
             self.log.warning("HttpProtocolError: %s", e)
         except (ConnectionError, EOFError) as e:
