@@ -2,3 +2,4 @@ __pycache__
 *.crt
 *.key
 config.json
+chnetworks.txt
