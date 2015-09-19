@@ -3,10 +3,11 @@
 import asyncio
 import ssl
 import logging
+import sys
 
 from common import nyapass_run, ConnectionHandler
 from config import Config
-from signature import sign_headers
+from signature import sign_headers, unsign_headers, SignatureError
 
 
 class ClientHandler(ConnectionHandler):
@@ -24,6 +25,20 @@ class ClientHandler(ConnectionHandler):
             self.config,
             self._local_headers,
         )
+
+    @asyncio.coroutine
+    def process_response(self):
+        try:
+            self._remote_headers = unsign_headers(
+                self.config,
+                self._remote_headers,
+            )
+        except SignatureError:
+            self.critical(
+                "Failed to verify response signature, server may be "
+                "improperly configured or we are experiencing MITM attack"
+            )
+            sys.exit(1)
 
     @asyncio.coroutine
     def connect_to_remote(self, remote, **kwargs):

@@ -3,10 +3,16 @@
 import asyncio
 import ssl
 import logging
+import re
 
 from common import nyapass_run, ConnectionHandler
 from config import Config
-from signature import unsign_headers, SignatureError
+from signature import sign_headers, unsign_headers, SignatureError
+
+FILTERED_RESPONSE_HEADERS = re.compile(
+    b"\r\nX-Nyapass[^:]*:\s*[^\r\n]+",
+    flags=re.S | re.I,
+)
 
 
 class ServerHandler(ConnectionHandler):
@@ -27,6 +33,13 @@ class ServerHandler(ConnectionHandler):
         else:
             self.default_remote = \
                 self.config.masq_host, self.config.masq_port
+
+    @asyncio.coroutine
+    def process_response(self):
+        self._remote_headers = sign_headers(
+            self.config,
+            FILTERED_RESPONSE_HEADERS.sub(b"", self._remote_headers),
+        )
 
 
 def create_ssl_ctx(config):
