@@ -134,6 +134,7 @@ class ServerHandler(ConnectionHandler):
     @asyncio.coroutine
     def process_request(self):
         unsigned_headers = self.try_unsign_readers(self._local_headers)
+        self._should_sign_response = bool(unsigned_headers)
         if not unsigned_headers:
             self.default_remote = \
                 self.config.masq_host, self.config.masq_port
@@ -154,10 +155,11 @@ class ServerHandler(ConnectionHandler):
 
     @asyncio.coroutine
     def process_response(self):
-        self._remote_headers = sign_headers(
-            self.config,
-            FILTERED_RESPONSE_HEADERS.sub(b"", self._remote_headers),
-        )
+        if self._should_sign_response:
+            self._remote_headers = sign_headers(
+                self.config,
+                FILTERED_RESPONSE_HEADERS.sub(b"", self._remote_headers),
+            )
 
 
 def create_ssl_ctx(config):
