@@ -136,6 +136,10 @@ class ServerHandler(ConnectionHandler):
         unsigned_headers = self.try_unsign_readers(self._local_headers)
         self._should_sign_response = bool(unsigned_headers)
         if not unsigned_headers:
+            self.set_request_host(
+                self.config.masq_host,
+                self.config.masq_port,
+            )
             self.default_remote = \
                 self.config.masq_host, self.config.masq_port
 

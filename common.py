@@ -395,6 +395,22 @@ class ConnectionHandler:
         parsed_uri = urlparse(uri)
         return parsed_uri.hostname
 
+    def set_request_host(self, host, port=None):
+        assert self._local_headers
+        if isinstance(host, str):
+            host = host.encode("utf-8")
+
+        if port and port != 80:
+            assert b":" not in host
+            host = host + b":" + port
+
+        self._local_headers = HTTP_HOST_RE.sub(
+            b"\r\n", self._local_headers,
+        )
+        self._local_headers = HTTP_REQUEST_RE.sub(
+            b"\\g<0>Host: " + host + b"\r\n", self._local_headers,
+        )
+
     @property
     def response_code(self):
         headers = self._remote_headers
