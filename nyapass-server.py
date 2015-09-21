@@ -7,7 +7,7 @@ import re
 from functools import partial
 from socket import gaierror, IPPROTO_TCP
 
-from common import nyapass_run, ConnectionHandler, TerminateConnection
+from common import nyapass_run, ConnectionHandler
 from config import Config
 from signature import sign_headers, unsign_headers, SignatureError
 
@@ -119,17 +119,12 @@ class ServerHandler(ConnectionHandler):
 
     @asyncio.coroutine
     def send_banned_response(self):
-        self._remote_headers = b"HTTP/1.1 410 Gone\r\n" + \
-            b"Connection: close\r\n" + \
-            b"Content-Length: 0\r\n" + \
-            b"X-Nyapass-Status: banned\r\n\r\n"
-        self._remote_headers = sign_headers(
-            self.config,
-            self._remote_headers,
+        yield from self.respond_and_close(
+            code=410,
+            status="Gone",
+            body="Nyapass: banned",
+            extra_headers="X-Nyapass-Status: banned",
         )
-        self._writer.write(self._remote_headers)
-        yield from self._writer.drain()
-        raise TerminateConnection
 
     @asyncio.coroutine
     def process_request(self):
@@ -160,9 +155,14 @@ class ServerHandler(ConnectionHandler):
     @asyncio.coroutine
     def process_response(self):
         if self._should_sign_response:
+            if not self.is_generated_response:
+                self._remote_headers = FILTERED_RESPONSE_HEADERS.sub(
+                    b"", self._remote_headers,
+                )
+
             self._remote_headers = sign_headers(
                 self.config,
-                FILTERED_RESPONSE_HEADERS.sub(b"", self._remote_headers),
+                self._remote_headers,
             )
 
 

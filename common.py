@@ -184,6 +184,7 @@ class ConnectionHandler:
     def reset_request(self):
         self._local_headers = None
         self._remote_headers = None
+        self.is_generated_response = False
 
     @asyncio.coroutine
     def run(self):
@@ -303,6 +304,44 @@ class ConnectionHandler:
     @asyncio.coroutine
     def process_response(self):
         pass
+
+    @asyncio.coroutine
+    def respond_and_close(
+        self, code, status, body=b"", extra_headers=b"\r\n",
+        process_response=True,
+    ):
+        assert 200 <= code <= 999
+        code = str(code).encode("utf-8")
+        if isinstance(status, str):
+            status = status.encode("utf-8")
+
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+
+        if isinstance(extra_headers, str):
+            extra_headers = extra_headers.encode("utf-8")
+
+        if extra_headers[-2:] != b"\r\n":
+            extra_headers += b"\r\n"
+
+        len_bytes = str(len(body)).encode("utf-8")
+        self.debug("respond_and_close: %s %s", code, status)
+        self._remote_headers = \
+            b"HTTP/1.1 " + code + b" " + status + b"\r\n" + \
+            b"Connection: close\r\n" + \
+            b"Content-Length: " + len_bytes + b"\r\n" + \
+            extra_headers + b"\r\n"
+        self.is_generated_response = True
+
+        if process_response:
+            yield from self.process_response()
+
+        self._writer.write(self._remote_headers)
+        if body and self.request_verb != b"HEAD":
+            self._writer.write(body)
+
+        yield from self._writer.drain()
+        raise TerminateConnection
 
     @asyncio.coroutine
     def run_tunnel(self):
