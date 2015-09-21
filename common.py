@@ -265,8 +265,6 @@ class ConnectionHandler:
     def handle_one_response(self):
         yield from self.read_remote_headers()
         assert self.response_code
-        if self.response_code == 100:
-            yield from self.handle_100_continue()
 
         self.debug("Handling response (%s)", self.response_code)
         yield from self.process_response()
@@ -321,13 +319,15 @@ class ConnectionHandler:
         ), timeout=None)
 
     @asyncio.coroutine
-    def handle_100_continue(self):
-        assert self.response_code == 100
-        self.debug("100 Continue")
-        self._writer.write(self._remote_headers)
-        yield from self._writer.drain()
-        self._remote_headers = None
-        yield from self.read_remote_headers()
+    def handle_10x(self):
+        assert self.response_code
+        while (100 <= self.response_code <= 199 and
+               self.response_code != 101):
+            self.debug("Forwarding status %s", self.response_code)
+            self._writer.write(self._remote_headers)
+            yield from self._writer.drain()
+            self._remote_headers = None
+            yield from self.read_remote_headers(auto_handle_10x=False)
 
     @asyncio.coroutine
     def send_request(self):
@@ -436,13 +436,16 @@ class ConnectionHandler:
         return int(m.group(1))
 
     @asyncio.coroutine
-    def read_remote_headers(self):
+    def read_remote_headers(self, auto_handle_10x=True):
         if self._remote_headers:
             return
 
         self.debug("Reading remote headers")
         reader, _ = self._remote_conn
         self._remote_headers = yield from read_headers(reader)
+        if auto_handle_10x:
+            yield from self.handle_10x()
+
         assert self.response_code
 
     @asyncio.coroutine
