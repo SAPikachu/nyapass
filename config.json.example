@@ -14,8 +14,8 @@
     "server": {
         "port": 8888,
         "listen_host": "0.0.0.0",
-        "masq_host": "127.0.0.1",
-        "masq_port": 3128,
+        "masq_host": "www.example.com",
+        "masq_port": 80,
         "forwarder_host": "127.0.0.1",
         "forwarder_port": 3129,
         "banned_network_list": "chnetworks.txt",
