@@ -149,8 +149,11 @@ class ServerHandler(ConnectionHandler):
             return
 
         self._local_headers = unsigned_headers
-        self.default_remote = \
-            self.config.forwarder_host, self.config.forwarder_port
+        if self.config.standalone_mode:
+            yield from self.prepare_standalone_request()
+        else:
+            self.default_remote = \
+                self.config.forwarder_host, self.config.forwarder_port
 
     @asyncio.coroutine
     def process_response(self):

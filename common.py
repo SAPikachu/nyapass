@@ -9,7 +9,7 @@ except ImportError:
 
 import logging
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 HTTP_REQUEST_RE = re.compile(
     b"^([A-Z]+) ([^\r\n]+) [A-Z]+/[0-9].[0-9]\r\n",
@@ -20,15 +20,23 @@ HTTP_STATUS_CODE_RE = re.compile(
     flags=re.S,
 )
 HTTP_IS_CHUNKED_RE = re.compile(
-    b"\r\nTransfer-Encoding:\\s*(?:[^\r\n]+,\\s*)?chunked\\s*\r\n",
+    b"\r\nTransfer-Encoding:\\s*(?:[^\r\n]+,\\s*)?chunked\\s*?\r\n",
     flags=re.S | re.I,
 )
 HTTP_CONTENT_LENGTH_RE = re.compile(
-    b"\r\nContent-Length:\\s*([^\r\n]*?)\\s*\r\n",
+    b"\r\nContent-Length:\\s*([^\r\n]*?)\\s*?\r\n",
+    flags=re.S | re.I,
+)
+HTTP_MULTIPLE_CONTENT_LENGTH_RE = re.compile(
+    b"\r\nContent-Length:.*\r\nContent-Length:",
     flags=re.S | re.I,
 )
 HTTP_HOST_RE = re.compile(
-    b"\r\nHost:\\s*([^\r\n]*?)\\s*\r\n",
+    b"\r\nHost:\\s*([^\r\n]*?)\\s*?\r\n",
+    flags=re.S | re.I,
+)
+HTTP_PROXY_HEADERS_RE = re.compile(
+    b"\r\nProxy-[^:]*?:\\s*([^\r\n]*?)\\s*?\r\n",
     flags=re.S | re.I,
 )
 log = logging.getLogger("nyapass")
@@ -141,6 +149,18 @@ def get_content_length(headers):
         ) from e
 
 
+def has_invalid_content_length(headers):
+    if HTTP_MULTIPLE_CONTENT_LENGTH_RE.search(headers):
+        return True
+
+    try:
+        get_content_length(headers)
+    except HttpProtocolError:
+        return True
+    else:
+        return False
+
+
 @asyncio.coroutine
 def pipe_body_generic(headers, reader, writer):
     assert headers
@@ -185,6 +205,7 @@ class ConnectionHandler:
         self._local_headers = None
         self._remote_headers = None
         self.is_generated_response = False
+        self.is_standalone_request = False
 
     @asyncio.coroutine
     def run(self):
@@ -266,6 +287,12 @@ class ConnectionHandler:
     def handle_one_response(self):
         yield from self.read_remote_headers()
         assert self.response_code
+        if has_invalid_content_length(self._remote_headers):
+            self.respond_and_close(
+                code=502,
+                status="Bad Gateway",
+                body="Unable to determine response length",
+            )
 
         self.debug("Handling response (%s)", self.response_code)
         yield from self.process_response()
@@ -344,6 +371,68 @@ class ConnectionHandler:
         raise TerminateConnection
 
     @asyncio.coroutine
+    def respond_bad_request(self):
+        yield from self.respond_and_close(
+            code=400,
+            status="Bad Request",
+            body="Bad Request",
+        )
+
+    @asyncio.coroutine
+    def prepare_standalone_request(self):
+        assert self._local_headers
+        if has_invalid_content_length(self._local_headers):
+            self.debug("Bad request: Invalid content length")
+            yield from self.respond_bad_request()
+            assert False  # Should be unreachable
+
+        host = self.request_host
+        if not host:
+            self.debug("Bad request: No host in request")
+            yield from self.respond_bad_request()
+            assert False  # Should be unreachable
+
+        if ":" in host:
+            hostname, port = host.split(":", 1)
+        else:
+            hostname, port = host, 80
+
+        try:
+            port = int(port)
+            if port < 0 or port > 65535:
+                raise ValueError
+        except (TypeError, ValueError):
+            self.debug("Bad request: Invalid port number")
+            yield from self.respond_bad_request()
+            assert False  # Should be unreachable
+
+        if self.request_verb != b"CONNECT":
+            self.set_request_host(host)  # Sanitize host header
+            m = self._request_re_match()
+            uri = m.group(1)
+            splitted = list(urlsplit(uri))
+            if splitted[0] and splitted[0] != b"http":
+                self.debug("Bad request: Unsupported scheme")
+                yield from self.respond_bad_request()
+                assert False  # Should be unreachable
+
+            # Remove scheme and host
+            splitted[0] = b""
+            splitted[1] = b""
+            fixed_url = urlunsplit(splitted)
+            self._local_headers = \
+                self._local_headers[:m.start(1)] + \
+                fixed_url + \
+                self._local_headers[m.end(1):]
+
+        self._local_headers = HTTP_PROXY_HEADERS_RE.sub(
+            b"\r\n", self._local_headers,
+        )
+
+        self.default_remote = (hostname, port)
+        self.is_standalone_request = True
+
+    @asyncio.coroutine
     def run_tunnel(self):
         assert self._reader
         assert self._writer
@@ -369,11 +458,30 @@ class ConnectionHandler:
             yield from self.read_remote_headers(auto_handle_10x=False)
 
     @asyncio.coroutine
+    def standalone_tunnel_created(self):
+        self._remote_headers = \
+            b"HTTP/1.1 200 Connection Established\r\n\r\n"
+
+    @asyncio.coroutine
+    def standalone_connection_error(self, e):
+        yield from self.respond_and_close(
+            code=502,
+            status="Bad Gateway",
+            body="Failed to connect to remote server: " + str(e),
+        )
+        assert False  # Should be unreachable
+
+    @asyncio.coroutine
     def send_request(self):
         assert self._local_headers
         assert self._reader
         _, remote_writer = self._remote_conn
         assert remote_writer
+
+        if self.is_standalone_request and self.request_verb == b"CONNECT":
+            self.debug("send_request: CONNECT")
+            # No need to send anything
+            return
 
         remote_writer.write(self._local_headers)
         yield from pipe_body_generic(
@@ -480,6 +588,10 @@ class ConnectionHandler:
             return
 
         self.debug("Reading remote headers")
+        if self.is_standalone_request and self.request_verb == b"CONNECT":
+            yield from self.standalone_tunnel_created()
+            return
+
         reader, _ = self._remote_conn
         self._remote_headers = yield from read_headers(reader)
         if auto_handle_10x:
@@ -522,7 +634,13 @@ class ConnectionHandler:
                 assert not self._remote_conn
 
         if not self._remote_conn:
-            yield from self.setup_remote_connection(remote)
+            try:
+                yield from self.setup_remote_connection(remote)
+            except Exception as e:
+                if self.is_standalone_request:
+                    yield from self.standalone_connection_error(e)
+
+                raise
 
         return self._remote_conn
 
