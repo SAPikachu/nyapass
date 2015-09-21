@@ -454,15 +454,6 @@ class ConnectionHandler:
         )
         return conn
 
-    @property
-    def connected_remote_endpoint(self):
-        if not self._remote_conn:
-            return None
-
-        _, writer = self._remote_conn
-        assert writer
-        return writer.get_extra_info("peername")
-
     @asyncio.coroutine
     def get_remote(self):
         return self.default_remote
@@ -500,6 +491,7 @@ class ConnectionHandler:
         _, writer = self._remote_conn
         assert writer
         self._active_writers.append(writer)
+        self.connected_remote_endpoint = remote
 
     def destroy_remote_connection(self):
         if not self._remote_conn:
@@ -509,6 +501,7 @@ class ConnectionHandler:
         assert writer
         safe_close(writer)
         self._active_writers.remove(writer)
+        self.connected_remote_endpoint = None
         self._remote_conn = None
 
     @property
