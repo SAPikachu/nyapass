@@ -119,7 +119,7 @@ class ServerHandler(ConnectionHandler):
 
     @asyncio.coroutine
     def send_banned_response(self):
-        self._remote_headers = b"HTTP/1.0 410 Gone\r\n" + \
+        self._remote_headers = b"HTTP/1.1 410 Gone\r\n" + \
             b"Connection: close\r\n" + \
             b"Content-Length: 0\r\n" + \
             b"X-Nyapass-Status: banned\r\n\r\n"

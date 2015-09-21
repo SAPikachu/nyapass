@@ -380,20 +380,28 @@ class ConnectionHandler:
             return m.group(2)
 
     @property
-    def request_hostname(self):
+    def request_host(self):
         if not self._local_headers:
             return None
 
         uri = self.request_uri.decode("utf-8")
         if self.request_verb == b"CONNECT":
-            return uri.split(":")[0]
+            return uri
 
         if "://" not in uri:
             m = HTTP_HOST_RE.search(self._local_headers)
             return m.group(1).decode("utf-8") if m else None
 
         parsed_uri = urlparse(uri)
-        return parsed_uri.hostname
+        return parsed_uri.netloc
+
+    @property
+    def request_hostname(self):
+        host = self.request_host
+        if not host:
+            return None
+
+        return host.split(":")[0]
 
     def set_request_host(self, host, port=None):
         assert self._local_headers
