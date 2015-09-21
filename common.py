@@ -39,6 +39,8 @@ HTTP_PROXY_HEADERS_RE = re.compile(
     b"\r\nProxy-[^:]*?:\\s*([^\r\n]*?)\\s*?\r\n",
     flags=re.S | re.I,
 )
+MAX_HEADER_LENGTH = 65536
+
 log = logging.getLogger("nyapass")
 
 
@@ -78,6 +80,9 @@ def read_headers(reader):
 
         if not line.strip():
             break
+
+        if len(headers) > MAX_HEADER_LENGTH:
+            raise HttpProtocolError("Header is too long")
 
     return headers
 
