@@ -4,6 +4,7 @@ import asyncio
 import ssl
 import logging
 import sys
+from functools import partial
 
 from common import nyapass_run, ConnectionHandler
 from config import Config
@@ -11,16 +12,63 @@ from signature import sign_headers, unsign_headers, SignatureError
 
 
 class ClientHandler(ConnectionHandler):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, divert_cache, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._divert_cache = divert_cache
+        self.buffer_request_body = self.config.divert_banned_requests
         self._ssl_ctx = create_ssl_ctx(self.config)
+
+    def reset_request(self):
+        super().reset_request()
+        self._local_headers_unsigned = None
+        self._is_diverted_request = False
         self.default_remote = (
             self.config.server_host,
             self.config.server_port,
         )
 
+    @property
+    def should_divert(self):
+        if not self.config.divert_banned_requests:
+            return False
+
+        if self._is_diverted_request:
+            return True
+
+        if not self._local_headers:
+            return False
+
+        host = self.request_hostname.lower()
+        if host in self._divert_cache:
+            return True
+
+        if not self._remote_headers:
+            return False
+
+        ret = self.response_code == 410 and \
+            b"\r\nX-Nyapass-Status: banned\r\n" in self._remote_headers
+        if ret:
+            self._divert_cache[host] = True
+
+        return ret
+
+    @asyncio.coroutine
+    def divert_request(self):
+        assert not self._is_diverted_request
+        self.debug("Diverting request")
+        self._is_diverted_request = True
+        if self._local_headers_unsigned:
+            self._local_headers = self._local_headers_unsigned
+
+        yield from self.prepare_standalone_request()
+
     @asyncio.coroutine
     def process_request(self):
+        if self.should_divert:
+            yield from self.divert_request()
+            return
+
+        self._local_headers_unsigned = self._local_headers
         self._local_headers = sign_headers(
             self.config,
             self._local_headers,
@@ -28,6 +76,9 @@ class ClientHandler(ConnectionHandler):
 
     @asyncio.coroutine
     def process_response(self):
+        if self._is_diverted_request:
+            return
+
         try:
             self._remote_headers = unsign_headers(
                 self.config,
@@ -40,9 +91,32 @@ class ClientHandler(ConnectionHandler):
             )
             sys.exit(1)
 
+        if self.should_divert:
+            self._send_request_future.cancel()
+            yield from asyncio.sleep(0)
+            assert self._send_request_future.done()
+            self._send_request_future = None
+
+            self.destroy_remote_connection()
+            self._remote_headers = None
+            yield from self.divert_request()
+            if self.request_has_body and self._reader.too_much_data:
+                yield from self.respond_and_close(
+                    code=503,
+                    status="Service Unavailable",
+                    body="Diverting request, please retry.",
+                )
+                assert False  # Unreachable
+
+            yield from self.ensure_remote_connection()
+            self.begin_send_request()
+            yield from self.read_remote_headers()
+
     @asyncio.coroutine
     def connect_to_remote(self, remote, **kwargs):
-        kwargs["ssl"] = self._ssl_ctx
+        if not self._is_diverted_request:
+            kwargs["ssl"] = self._ssl_ctx
+
         ret = yield from super().connect_to_remote(
             remote,
             **kwargs
@@ -67,8 +141,9 @@ def create_ssl_ctx(config):
 
 def main(config):
     logging.basicConfig(level=config.log_level)
+    divert_cache = {}
     nyapass_run(
-        handler_factory=ClientHandler,
+        handler_factory=partial(ClientHandler, divert_cache=divert_cache),
         config=config,
     )
 

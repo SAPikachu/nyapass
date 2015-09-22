@@ -7,6 +7,7 @@ try:
 except ImportError:
     from asyncio import async as ensure_future
 
+from io import BytesIO
 import logging
 import re
 from urllib.parse import urlparse, urlsplit, urlunsplit
@@ -184,16 +185,119 @@ def pipe_body_generic(headers, reader, writer):
     return content_length == 0
 
 
+class TeeStreamReader:
+    """Buffer request body so that we can resend it later"""
+    def __init__(self, inner):
+        self._inner = inner
+        self._limit = 524288
+        self.reset()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    @property
+    def _len_buffered_data(self):
+        return self._buffer.getbuffer().nbytes
+
+    def _buffer_data(self, data):
+        if not self.buffering_enabled or self.too_much_data:
+            return
+
+        if self._len_buffered_data + len(data) > self._limit:
+            self.too_much_data = True
+            self._buffer = None
+            return
+
+        self._buffer.write(data)
+
+    def _ensure_buffer(self):
+        if not self.buffering_enabled:
+            raise ValueError("Buffering is not enabled")
+
+        if self.too_much_data:
+            raise ValueError("Data length limit has been exceeded")
+
+    def reread_from_buffer(self):
+        self._ensure_buffer()
+        self._buffer.seek(0)
+
+    @property
+    def _should_reread_from_buffer(self):
+        if not self.buffering_enabled or self.too_much_data:
+            return False
+
+        return self._buffer.tell() < self._len_buffered_data
+
+    def reset(self):
+        self._buffer = BytesIO()
+        self.buffering_enabled = False
+        self.too_much_data = False
+
+    def get_buffered_data(self):
+        self._ensure_buffer()
+        return self._buffer.getvalue()
+
+    @asyncio.coroutine
+    def read(self, n=-1):
+        if self._should_reread_from_buffer:
+            data = self._buffer.read(n)
+            if n == -1:
+                assert not self._should_reread_from_buffer
+                data += self.read()
+
+            return data
+
+        data = yield from self._inner.read(n)
+        if data:
+            self._buffer_data(data)
+
+        return data
+
+    @asyncio.coroutine
+    def readexactly(self, n):
+        if self._should_reread_from_buffer:
+            data = self._buffer.read(n)
+            if len(data) < n:
+                assert not self._should_reread_from_buffer
+                data += yield from self.readexactly(n - len(data))
+
+            return data
+
+        data = yield from self._inner.readexactly(n)
+        if data:
+            self._buffer_data(data)
+
+        return data
+
+    @asyncio.coroutine
+    def readline(self):
+        if self._should_reread_from_buffer:
+            data = self._buffer.readline()
+            assert data
+            if data[-1] != b"\n":
+                assert not self._should_reread_from_buffer
+                data += yield from self.readline()
+
+            return data
+
+        data = yield from self._inner.readline()
+        if data:
+            self._buffer_data(data)
+
+        return data
+
+
 class ConnectionHandler:
     GLOBAL_CONNECTION_COUNTER = 0
 
     def __init__(self, reader, writer, config):
         self.config = config
         self.init_logging()
-        self._reader = reader
+        self._reader = TeeStreamReader(reader)
         self._writer = writer
         self._active_writers = []
         self._remote_conn = None
+        self.buffer_request_body = False
         self.reset_request()
 
     def init_logging(self):
@@ -209,6 +313,8 @@ class ConnectionHandler:
     def reset_request(self):
         self._local_headers = None
         self._remote_headers = None
+        self._reader.reset()
+        self._send_request_future = None
         self.is_generated_response = False
         self.is_standalone_request = False
 
@@ -243,18 +349,34 @@ class ConnectionHandler:
 
     @asyncio.coroutine
     def handle_one_request(self):
+        self.debug("handle_one_request")
         monitor = ensure_future(self.monitor_remote_connection())
         yield from self.read_local_headers()
         monitor.cancel()
+        yield from asyncio.sleep(0)
         self.debug("Handling request (%s, %s)",
                    self.request_verb,
                    self.request_uri,)
         yield from self.process_request()
         yield from self.ensure_remote_connection()
-        yield from asyncio.wait_for(asyncio.gather(
-            self.send_request(),
-            self.handle_one_response(),
-        ), timeout=None)
+        self.begin_send_request()
+        try:
+            yield from self.handle_one_response()
+        except:
+            self._send_request_future.cancel()
+            raise
+        else:
+            if not self._send_request_future.done():
+                # Last chance to clean up
+                yield from asyncio.sleep(0)
+
+            if not self._send_request_future.done():
+                self._send_request_future.cancel()
+                yield from asyncio.sleep(0)
+                raise RuntimeError("Got response before request is sent")
+
+            self._send_request_future.result()
+
         self.reset_request()
 
     @property
@@ -267,6 +389,14 @@ class ConnectionHandler:
             return True
 
         return False
+
+    @property
+    def request_has_body(self):
+        assert self._local_headers
+        if HTTP_IS_CHUNKED_RE.search(self._local_headers):
+            return True
+
+        return bool(get_content_length(self._local_headers))
 
     @property
     def response_has_body(self):
@@ -307,6 +437,7 @@ class ConnectionHandler:
     def send_response(self):
         assert self._writer
         assert self._remote_headers
+        self.debug("send_response")
         self._writer.write(self._remote_headers)
         if self.is_tunnel_request:
             self.debug("Is tunnel request")
@@ -476,6 +607,10 @@ class ConnectionHandler:
         )
         assert False  # Should be unreachable
 
+    def begin_send_request(self):
+        assert not self._send_request_future
+        self._send_request_future = ensure_future(self.send_request())
+
     @asyncio.coroutine
     def send_request(self):
         assert self._local_headers
@@ -483,12 +618,23 @@ class ConnectionHandler:
         _, remote_writer = self._remote_conn
         assert remote_writer
 
+        self.debug("send_request")
         if self.is_standalone_request and self.request_verb == b"CONNECT":
             self.debug("send_request: CONNECT")
             # No need to send anything
             return
 
         remote_writer.write(self._local_headers)
+        if not self.request_has_body:
+            yield from remote_writer.drain()
+            return
+
+        if self._reader.buffering_enabled:
+            self._reader.reread_from_buffer()
+
+        if self.buffer_request_body:
+            self._reader.buffering_enabled = True
+
         yield from pipe_body_generic(
             self._local_headers,
             self._reader,
