@@ -545,7 +545,7 @@ class ConnectionHandler:
         if self.request_verb != b"CONNECT":
             self.set_request_host(host)  # Sanitize host header
             m = self._request_re_match()
-            uri = m.group(1)
+            uri = m.group(2)
             splitted = list(urlsplit(uri))
             if splitted[0] and splitted[0] != b"http":
                 self.debug("Bad request: Unsupported scheme")
@@ -557,9 +557,9 @@ class ConnectionHandler:
             splitted[1] = b""
             fixed_url = urlunsplit(splitted)
             self._local_headers = \
-                self._local_headers[:m.start(1)] + \
+                self._local_headers[:m.start(2)] + \
                 fixed_url + \
-                self._local_headers[m.end(1):]
+                self._local_headers[m.end(2):]
 
         self._local_headers = HTTP_PROXY_HEADERS_RE.sub(
             b"\r\n", self._local_headers,
