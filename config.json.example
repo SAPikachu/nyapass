@@ -17,6 +17,7 @@
         "listen_host": "0.0.0.0",
         "masq_host": "www.example.com",
         "masq_port": 80,
+        "masq_strip_cookies": true,
         "standalone_mode": true,
         "forwarder_host": "",
         "forwarder_port": 0,

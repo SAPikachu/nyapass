@@ -15,6 +15,10 @@ FILTERED_RESPONSE_HEADERS = re.compile(
     b"\r\nX-Nyapass[^:]*:\s*[^\r\n]+",
     flags=re.S | re.I,
 )
+HTTP_SET_COOKIE_RE = re.compile(
+    b"\r\nSet-Cookie:\\s*([^\r\n]+)",
+    flags=re.S | re.I,
+)
 
 
 class BannedNetworks:
@@ -129,7 +133,7 @@ class ServerHandler(ConnectionHandler):
     @asyncio.coroutine
     def process_request(self):
         unsigned_headers = self.try_unsign_readers(self._local_headers)
-        self._should_sign_response = bool(unsigned_headers)
+        self._is_authorized_request = bool(unsigned_headers)
         if not unsigned_headers:
             self.set_request_host(
                 self.config.masq_host,
@@ -157,7 +161,7 @@ class ServerHandler(ConnectionHandler):
 
     @asyncio.coroutine
     def process_response(self):
-        if self._should_sign_response:
+        if self._is_authorized_request:
             if not self.is_generated_response:
                 self._remote_headers = FILTERED_RESPONSE_HEADERS.sub(
                     b"", self._remote_headers,
@@ -167,6 +171,11 @@ class ServerHandler(ConnectionHandler):
                 self.config,
                 self._remote_headers,
             )
+        else:
+            if self.config.masq_strip_cookies:
+                self._remote_headers = HTTP_SET_COOKIE_RE.sub(
+                    b"", self._remote_headers,
+                )
 
 
 def create_ssl_ctx(config):
