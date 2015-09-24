@@ -59,7 +59,7 @@ class BannedNetworks:
             return
 
         is_banned = False
-        for _, _, _, _, (ip, _) in addresses:
+        for _, _, _, _, (ip, *remaining) in addresses:
             is_banned = bool(self._banned_networks.search_best(ip))
             if is_banned:
                 break
