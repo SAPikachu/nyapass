@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Script originally written by Young Ng (fivesheep @ GitHub)
 # Modified by SAPikachu
 
-from __future__ import print_function
+
 import re
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import sys
 import math
 
@@ -59,7 +59,7 @@ def fetch_ip_data():
     #fetch data from apnic
     print("Fetching data from apnic.net, it might take a few minutes, please wait...", file=sys.stderr)
     url=r'http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest'
-    data=urllib2.urlopen(url).read()
+    data=urllib.request.urlopen(url).read().decode("utf-8")
     return process_v4(data) + process_v6(data)
 
 def build_route_script(format="{ip}/{mask}"):

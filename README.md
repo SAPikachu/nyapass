@@ -12,8 +12,7 @@ Ask Mr. Fang please.
 * Integrated chnroutes support.
 
 ## System requirement
-* Python 3.4+ (Main script)
-* Python 2.7+ (chnetworks-build.py)
+* Python 3.4+
 * Tested on Ubuntu 15.04, should work on most Linux/FreeBSD systems that are reasonably updated
 
 ## Quick start (server)
