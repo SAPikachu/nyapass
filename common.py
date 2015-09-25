@@ -878,8 +878,19 @@ def detect_nt():
         asyncio.set_event_loop(loop)
 
 
+def setup_signal():
+    """By default Python won't exit on SIGTERM, we exit on that."""
+    def _handler(signum, frame):
+        raise KeyboardInterrupt
+
+    import signal
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _handler)
+
+
 def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
     detect_nt()
+    setup_signal()
     loop = asyncio.get_event_loop()
     instance = Nyapass(handler_factory=handler_factory, config=config)
     coro = asyncio.start_server(
