@@ -320,6 +320,19 @@ class ConnectionHandler:
 
     @asyncio.coroutine
     def run(self):
+        try:
+            yield from self._run_impl()
+        except TerminateConnection:
+            pass
+        except HttpProtocolError as e:
+            self.warning("HttpProtocolError: %s", e)
+        except (ConnectionError, EOFError) as e:
+            self.debug("%s", e)
+        except Exception as e:
+            self.exception(e)
+
+    @asyncio.coroutine
+    def _run_impl(self):
         self.debug("Handling connection from %s",
                    self._writer.get_extra_info("peername"))
         self._active_writers.append(self._writer)
@@ -841,13 +854,8 @@ class Nyapass:
         self.active_handlers.append(handler)
         try:
             yield from handler.run()
-        except TerminateConnection:
-            pass
-        except HttpProtocolError as e:
-            self.log.warning("HttpProtocolError: %s", e)
-        except (ConnectionError, EOFError) as e:
-            self.log.debug("%s", e)
         except Exception as e:
+            self.log.error("Unexpected error from handler.run")
             self.log.exception(e)
         finally:
             handler.close()
