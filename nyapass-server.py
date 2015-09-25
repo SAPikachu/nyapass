@@ -7,7 +7,7 @@ import re
 from functools import partial
 from socket import gaierror, IPPROTO_TCP
 
-from common import nyapass_run, ConnectionHandler
+from common import nyapass_run, ConnectionHandler, HeaderTooLongError
 from config import Config
 from signature import sign_headers, unsign_headers, SignatureError
 
@@ -197,6 +197,25 @@ class ServerHandler(ConnectionHandler):
                 self._remote_headers = HTTP_SET_COOKIE_RE.sub(
                     b"", self._remote_headers,
                 )
+
+    @asyncio.coroutine
+    def read_local_headers(self):
+        try:
+            ret = yield from super().read_local_headers()
+            return ret
+        except HeaderTooLongError as e:
+            self.warn(
+                "Header is too long or invalid, may be active probing"
+            )
+
+            # Ensure we look exactly like the masquerading server
+            self.default_remote = \
+                self.config.masq_host, self.config.masq_port
+            yield from self.ensure_remote_connection()
+            _, writer = self._remote_conn
+            assert writer
+            writer.write(e.buffered_data)
+            yield from self.run_tunnel()
 
 
 def create_ssl_ctx(config):

@@ -49,6 +49,12 @@ class HttpProtocolError(ValueError):
     pass
 
 
+class HeaderTooLongError(HttpProtocolError):
+    def __init__(self, *args, buffered_data, **kwargs):
+        super().__init__("Header is too long", *args, **kwargs)
+        self.buffered_data = buffered_data
+
+
 class TerminateConnection(Exception):
     pass
 
@@ -73,7 +79,18 @@ def safe_close(obj):
 def read_headers(reader):
     headers = b""
     while True:
-        line = yield from reader.readline()
+        try:
+            line = yield from reader.readline()
+        except ValueError:
+            # There is no \n in the last 64kB(?) of data.
+            # These bytes are lost due to implementation of StreamReader,
+            # but in this case it is likely that the client is sending
+            # garbage to us, either by mistake or to probe existence of
+            # nyapass. So we just replace the data block with another
+            # pile of garbage, and let consumer handle it.
+            log.warn("Client is sending garbage to us")
+            line = b"A" * (MAX_HEADER_LENGTH + 1)
+
         headers += line
 
         if not line:
@@ -83,7 +100,7 @@ def read_headers(reader):
             break
 
         if len(headers) > MAX_HEADER_LENGTH:
-            raise HttpProtocolError("Header is too long")
+            raise HeaderTooLongError(buffered_data=headers)
 
     return headers
 
