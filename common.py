@@ -119,9 +119,13 @@ def pipe_chunked_body(reader, writer):
 @asyncio.coroutine
 def pipe_forever(reader, writer):
     while True:
-        data = yield from reader.read(65536)
-        if not data:
-            raise EOFError("EOF in pipe_forever")
+        try:
+            data = yield from reader.read(65536)
+            if not data:
+                raise EOFError("EOF in pipe_forever")
+        except Exception:
+            safe_close(writer)
+            raise
 
         writer.write(data)
         yield from writer.drain()
