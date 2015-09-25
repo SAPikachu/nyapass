@@ -49,7 +49,7 @@ class BannedNetworks:
                 self.neg_cache_seconds,
                 lambda: self._banned_hosts.pop(host, None),
             )
-            return
+            return None
 
         is_banned = False
         for _, _, _, _, (ip, *remaining) in addresses:
@@ -80,6 +80,10 @@ class BannedNetworks:
         is_banned = self.is_banned_domain(host)
         if not is_banned:
             is_banned = yield from self.is_banned_network(host, loop)
+
+        if is_banned is None:
+            # Failed to resolve
+            return False
 
         self._banned_hosts[host] = is_banned
         loop.call_later(
