@@ -12,11 +12,11 @@ from signature import sign_headers, unsign_headers, SignatureError
 
 
 class ClientHandler(ConnectionHandler):
-    def __init__(self, divert_cache, *args, **kwargs):
+    def __init__(self, divert_cache, ssl_ctx, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._divert_cache = divert_cache
         self.buffer_request_body = self.config.divert_banned_requests
-        self._ssl_ctx = create_ssl_ctx(self.config)
+        self._ssl_ctx = ssl_ctx
 
     def reset_request(self):
         super().reset_request()
@@ -142,8 +142,13 @@ def create_ssl_ctx(config):
 def main(config):
     logging.basicConfig(level=config.log_level)
     divert_cache = {}
+    ssl_ctx = create_ssl_ctx(config)
     nyapass_run(
-        handler_factory=partial(ClientHandler, divert_cache=divert_cache),
+        handler_factory=partial(
+            ClientHandler,
+            divert_cache=divert_cache,
+            ssl_ctx=ssl_ctx,
+        ),
         config=config,
     )
 
