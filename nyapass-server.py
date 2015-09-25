@@ -25,26 +25,19 @@ class BannedNetworks:
     def __init__(
         self,
         list_file,
+        banned_domains,
         cache_seconds=60*60*24,
         neg_cache_seconds=60,
     ):
         self.log = logging.getLogger(self.__class__.__name__)
         self._banned_hosts = dict()
         self._load_banned_networks(list_file)
+        self.banned_domains = banned_domains
         self.cache_seconds = cache_seconds
         self.neg_cache_seconds = neg_cache_seconds
 
     @asyncio.coroutine
-    def is_banned(self, host):
-        if not self._banned_networks:
-            return False
-
-        host = host.lower()
-        cached_result = self._banned_hosts.get(host, None)
-        if cached_result is not None:
-            return cached_result
-
-        loop = asyncio.get_event_loop()
+    def is_banned_network(self, host, loop):
         try:
             addresses = yield from loop.getaddrinfo(
                 host, None, proto=IPPROTO_TCP,
@@ -63,6 +56,30 @@ class BannedNetworks:
             is_banned = bool(self._banned_networks.search_best(ip))
             if is_banned:
                 break
+
+        return is_banned
+
+    def is_banned_domain(self, host):
+        for domain in self.banned_domains:
+            if host == domain or host.endswith("." + domain):
+                return True
+
+        return False
+
+    @asyncio.coroutine
+    def is_banned(self, host):
+        if not self._banned_networks:
+            return False
+
+        host = host.lower()
+        cached_result = self._banned_hosts.get(host, None)
+        if cached_result is not None:
+            return cached_result
+
+        loop = asyncio.get_event_loop()
+        is_banned = self.is_banned_domain(host)
+        if not is_banned:
+            is_banned = yield from self.is_banned_network(host, loop)
 
         self._banned_hosts[host] = is_banned
         loop.call_later(
@@ -194,7 +211,10 @@ def create_ssl_ctx(config):
 
 def main(config):
     logging.basicConfig(level=config.log_level)
-    banned_net = BannedNetworks(config.banned_network_list)
+    banned_net = BannedNetworks(
+        config.banned_network_list,
+        config.banned_domains,
+    )
     nyapass_run(
         handler_factory=partial(ServerHandler, banned_net=banned_net),
         config=config,

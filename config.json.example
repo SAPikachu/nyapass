@@ -22,6 +22,23 @@
         "forwarder_host": "",
         "forwarder_port": 0,
         "banned_network_list": "chnetworks.txt",
+        "banned_domains": [
+            "cn",
+            "bilibili.com",
+            "taobao.com",
+            "alicdn.com",
+            "alipay.com",
+            "alibaba.com",
+            "aliyun.com",
+            "mmstat.com",
+            "cnzz.com",
+            "hdslb.com",
+            "weibo.com",
+            "qq.com",
+            "baidu.com",
+            "bdstatic.com",
+            "bdimg.com"
+        ],
         "tls_cert": "nyapass-server.crt",
         "tls_key": "nyapass-server.key",
         "tls_ciphers": "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK"
