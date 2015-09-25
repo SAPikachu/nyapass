@@ -864,7 +864,22 @@ class Nyapass:
         return bool(self.active_handlers)
 
 
+def detect_nt():
+    import os
+    import sys
+    if os.name == 'nt':
+        if sys.version_info < (3, 5, 0):
+            log.fatal(
+                "On Windows, Python 3.5+ is required to run nyapass"
+            )
+            sys.exit(1)
+
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+
+
 def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
+    detect_nt()
     loop = asyncio.get_event_loop()
     instance = Nyapass(handler_factory=handler_factory, config=config)
     coro = asyncio.start_server(
