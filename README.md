@@ -12,8 +12,9 @@ Ask Mr. Fang please.
 * Integrated chnroutes support.
 
 ## System requirement
-* Python 3.4+
+* Python 3.4+ (3.5+ on Windows)
 * Tested on Ubuntu 15.04, should work on most Linux/FreeBSD systems that are reasonably updated
+* Client tested on Windows 7 with Python 3.5
 
 ## Quick start (server)
 
