@@ -504,7 +504,7 @@ class ConnectionHandler:
 
     @asyncio.coroutine
     def respond_and_close(
-        self, code, status, body=b"", extra_headers=b"\r\n",
+        self, code, status, body=b"", extra_headers=b"",
         process_response=True,
     ):
         assert 200 <= code <= 999
@@ -518,8 +518,8 @@ class ConnectionHandler:
         if isinstance(extra_headers, str):
             extra_headers = extra_headers.encode("utf-8")
 
-        if extra_headers[-2:] != b"\r\n":
-            extra_headers += b"\r\n"
+        if extra_headers[-2:] == b"\r\n":
+            extra_headers = extra_headers[:-2]
 
         len_bytes = str(len(body)).encode("utf-8")
         self.debug("respond_and_close: %s %s", code, status)
