@@ -518,8 +518,8 @@ class ConnectionHandler:
         if isinstance(extra_headers, str):
             extra_headers = extra_headers.encode("utf-8")
 
-        if extra_headers[-2:] == b"\r\n":
-            extra_headers = extra_headers[:-2]
+        if extra_headers and extra_headers[-2:] != b"\r\n":
+            extra_headers += b"\r\n"
 
         len_bytes = str(len(body)).encode("utf-8")
         self.debug("respond_and_close: %s %s", code, status)
