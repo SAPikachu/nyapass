@@ -28,6 +28,7 @@
             "taobao.com",
             "alicdn.com",
             "alipay.com",
+            "alipayobjects.com",
             "alibaba.com",
             "aliyun.com",
             "mmstat.com",
@@ -37,7 +38,10 @@
             "qq.com",
             "baidu.com",
             "bdstatic.com",
-            "bdimg.com"
+            "bdimg.com",
+            "youku.com",
+            "ykimg.com",
+            "irs01.net"
         ],
         "tls_cert": "nyapass-server.crt",
         "tls_key": "nyapass-server.key",
