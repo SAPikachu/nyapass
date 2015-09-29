@@ -128,7 +128,7 @@ class ClientHandler(ConnectionHandler):
         )
 
         if not self._is_diverted_request:
-            self._manager.validate_remote(ret[1])
+            self._manager.validate_remote(remote, ret[1])
 
         return ret
 
@@ -192,12 +192,12 @@ class ClientHandlerManager:
 
         return sslobj.getpeercert(True)
 
-    def validate_remote(self, remote_writer):
+    def validate_remote(self, remote, remote_writer):
         if not self.config.pin_server_cert:
             return
 
         self.validate_host_cert(
-            "%s:%s" % remote_writer.get_extra_info("peername"),
+            "%s:%s" % remote,
             self.get_remote_cert(remote_writer),
         )
 
