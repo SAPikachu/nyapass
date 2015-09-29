@@ -213,13 +213,13 @@ class ClientHandlerManager:
             self._write_known_hosts()
         elif self._known_hosts[host] != cert_hash:
             self.log.critical(
-                "Certificate of %s has changed (old = %s, new = %s), "
-                "if you haven't changed your certfiticate recently, "
+                "Certificate of %s has changed (old = %s, new = %s). "
+                "If you haven't changed your certificate recently, "
                 "this probably means that someone is MITMing us. "
-                "If you confirm %s is safe, "
-                "delete entry of the server in %s and restart nyapass.",
+                "If you believe that %s is safe, "
+                "delete entry of %s in %s and restart nyapass.",
                 host, self._known_hosts[host], cert_hash,
-                host, self.config.known_hosts_file,
+                host, host, self.config.known_hosts_file,
             )
             sys.exit(1)
 
