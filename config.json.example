@@ -10,7 +10,9 @@
         "server_host": "127.0.0.1",
         "server_port": 8888,
         "divert_banned_requests": true,
-        "ssl_verify": false
+        "ssl_verify": false,
+        "pin_server_cert": true,
+        "known_hosts_file": "~/.nyapass/known_hosts.json"
     },
     "server": {
         "port": 443,

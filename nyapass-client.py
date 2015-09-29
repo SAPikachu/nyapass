@@ -3,20 +3,25 @@
 import asyncio
 import ssl
 import logging
+import os
 import sys
-from functools import partial
+import json
+from hashlib import sha512
 
 from common import nyapass_run, ConnectionHandler
 from config import Config
 from signature import sign_headers, unsign_headers, SignatureError
 
+log = logging.getLogger("nyapass")
+
 
 class ClientHandler(ConnectionHandler):
-    def __init__(self, divert_cache, ssl_ctx, *args, **kwargs):
+    def __init__(self, divert_cache, ssl_ctx, manager, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._divert_cache = divert_cache
         self.buffer_request_body = self.config.divert_banned_requests
         self._ssl_ctx = ssl_ctx
+        self._manager = manager
 
     def reset_request(self):
         super().reset_request()
@@ -121,7 +126,102 @@ class ClientHandler(ConnectionHandler):
             remote,
             **kwargs
         )
+
+        if not self._is_diverted_request:
+            self._manager.validate_remote(ret[1])
+
         return ret
+
+
+class ClientHandlerManager:
+    def __init__(self, config, handler_cls=ClientHandler):
+        self.log = log.getChild(self.__class__.__name__)
+        self.config = config
+        self._handler_cls = handler_cls
+        self._ssl_ctx = create_ssl_ctx(config)
+        self._divert_cache = {}
+        self._known_hosts = {}
+        if self.config.known_hosts_file:
+            self.config.known_hosts_file = os.path.expanduser(
+                self.config.known_hosts_file,
+            )
+            self._read_known_hosts()
+
+    def __call__(self, *args, **kwargs):
+        return self._handler_cls(
+            *args,
+            divert_cache=self._divert_cache,
+            ssl_ctx=self._ssl_ctx,
+            manager=self,
+            **kwargs
+        )
+
+    def _read_known_hosts(self):
+        if not os.path.isfile(self.config.known_hosts_file):
+            return
+
+        try:
+            with open(self.config.known_hosts_file, "r") as f:
+                self._known_hosts.update(json.load(f))
+        except Exception as e:
+            self.log.warning("Failed to load saved known hosts: %s", e)
+
+    def _write_known_hosts(self):
+        if not self.config.known_hosts_file:
+            return
+
+        try:
+            dir = os.path.dirname(self.config.known_hosts_file)
+            if not os.path.isdir(dir):
+                os.makedirs(dir)
+
+            with open(self.config.known_hosts_file, "w") as f:
+                json.dump(self._known_hosts, f)
+        except Exception as e:
+            self.log.warning("Failed to save known hosts: %s", e)
+
+    def get_remote_cert(self, writer):
+        sslobj = writer.get_extra_info("ssl_object")  # Python 3.5.1+
+        if not sslobj:
+            sslobj = writer.get_extra_info("socket")  # Python 3.4.x?
+            assert sslobj
+
+        if not hasattr(sslobj, "getpeercert"):
+            # Python 3.5.0, no public way to get this, so we have to...
+            sslobj = writer.transport._ssl_protocol._sslpipe.ssl_object
+
+        return sslobj.getpeercert(True)
+
+    def validate_remote(self, remote_writer):
+        if not self.config.pin_server_cert:
+            return
+
+        self.validate_host_cert(
+            "%s:%s" % remote_writer.get_extra_info("peername"),
+            self.get_remote_cert(remote_writer),
+        )
+
+    def validate_host_cert(self, host, cert):
+        assert cert
+        cert_hash = sha512(cert).hexdigest()
+        if host not in self._known_hosts:
+            self.log.info(
+                "Adding %s to known hosts (fingerprint: %s)",
+                host, cert_hash,
+            )
+            self._known_hosts[host] = cert_hash
+            self._write_known_hosts()
+        elif self._known_hosts[host] != cert_hash:
+            self.log.critical(
+                "Certificate of %s has changed (old = %s, new = %s), "
+                "if you haven't changed your certfiticate recently, "
+                "this probably means that someone is MITMing us. "
+                "If you confirm %s is safe, "
+                "delete entry of the server in %s and restart nyapass.",
+                host, self._known_hosts[host], cert_hash,
+                host, self.config.known_hosts_file,
+            )
+            sys.exit(1)
 
 
 def create_ssl_ctx(config):
@@ -141,14 +241,8 @@ def create_ssl_ctx(config):
 
 def main(config):
     logging.basicConfig(level=config.log_level)
-    divert_cache = {}
-    ssl_ctx = create_ssl_ctx(config)
     nyapass_run(
-        handler_factory=partial(
-            ClientHandler,
-            divert_cache=divert_cache,
-            ssl_ctx=ssl_ctx,
-        ),
+        handler_factory=ClientHandlerManager(config),
         config=config,
     )
 
