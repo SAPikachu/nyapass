@@ -80,7 +80,7 @@ main() {
 
     echo Creating container...
     docker rm -f nyapass-server >/dev/null 2>&1 || true
-    docker run -d --name nyapass-server -p 0.0.0.0:443:443 nyapass-server
+    docker run -d --restart=always --name nyapass-server -p 0.0.0.0:443:443 nyapass-server
     cd /
     rm -r $INSTDIR
     echo Installation completed.
