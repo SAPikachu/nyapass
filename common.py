@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from asyncio import CancelledError
+from asyncio import CancelledError, Task
 try:
     from asyncio import ensure_future
 except ImportError:
@@ -933,18 +933,32 @@ def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
 
     # Serve requests until CTRL+c is pressed
     log.info("Serving on {}".format(server.sockets[0].getsockname()))
+
+    def _cleanup(disable_pending_task_warnings=False):
+        # Close the server
+        server.close()
+        instance.close_all()
+
+        loop.run_until_complete(server.wait_closed())
+        while instance.has_active_connection:
+            loop.run_until_complete(asyncio.sleep(0.1))
+
+        loop.stop()
+        if disable_pending_task_warnings:
+            [t.result() for t in Task.all_tasks()]
+
+        loop.close()
+
     try:
         loop.run_forever()
+    except SystemExit:
+        try:
+            _cleanup(True)
+        except:
+            pass
+
+        raise
     except KeyboardInterrupt:
         pass
 
-    # Close the server
-    server.close()
-    instance.close_all()
-
-    loop.run_until_complete(server.wait_closed())
-    while instance.has_active_connection:
-        loop.run_until_complete(asyncio.sleep(0.1))
-
-    loop.stop()
-    loop.close()
+    _cleanup()
