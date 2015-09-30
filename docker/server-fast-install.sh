@@ -68,6 +68,9 @@ main() {
     if ! command_exists docker; then
         echo Installing docker...
         $curl https://get.docker.com/ | sh
+        {
+            docker info || start docker || systemctl start docker
+        } >/dev/null 2>&1
     fi
     echo Building Docker image...
     INSTDIR=/tmp/nyapass-server-docker
