@@ -11,6 +11,7 @@ from io import BytesIO
 import logging
 import re
 from urllib.parse import urlparse, urlsplit, urlunsplit
+from socket import IPPROTO_TCP, TCP_NODELAY
 
 HTTP_REQUEST_RE = re.compile(
     b"^([A-Z]+) ([^\r\n]+) [A-Z]+/[0-9].[0-9]\r\n",
@@ -73,6 +74,11 @@ def safe_close(obj):
         obj.close()
     except Exception:
         pass
+
+
+def enable_nodelay(writer):
+    socket = writer.get_extra_info("socket")
+    socket.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
 
 
 @asyncio.coroutine
@@ -835,6 +841,7 @@ class ConnectionHandler:
         self._remote_conn = yield from self.connect_to_remote(remote)
         _, writer = self._remote_conn
         assert writer
+        enable_nodelay(writer)
         self._active_writers.append(writer)
         self.connected_remote_endpoint = remote
 
@@ -867,6 +874,7 @@ class Nyapass:
 
     @asyncio.coroutine
     def handle_connection(self, reader, writer):
+        enable_nodelay(writer)
         handler = self._handler_factory(
             reader=reader,
             writer=writer,
