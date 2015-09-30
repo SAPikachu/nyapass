@@ -35,7 +35,7 @@ main() {
             }
             break
         done
-        IFS='' read -r -p "Enter your password (empty to generate a random one): " PASSWORD
+        IFS='' read -r -p "Enter your password (please don't enter special characters here, if you need that, please create config.json manually), or press enter to generate a random one: " PASSWORD
         if [ -z "$PASSWORD" ]; then
             PASSWORD=$(dd if=/dev/urandom bs=24 count=1 2>/dev/null | xxd -p)
         fi
