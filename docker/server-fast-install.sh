@@ -42,7 +42,7 @@ main() {
         echo Your password is: \"$PASSWORD\" \(without quotes\)
         echo Press enter to clear terminal and continue.
         read -s dummy
-        clear
+        clear || true
         $curl https://raw.githubusercontent.com/SAPikachu/nyapass/master/config.json.example > config.json
         sed -i "s/\"password\": *\"[^\"]*\"/\"password\": \"$PASSWORD\"/g" config.json
         sed -i "s/\"masq_host\": *\"[^\"]*\"/\"masq_host\": \"$MASQ\"/g" config.json
