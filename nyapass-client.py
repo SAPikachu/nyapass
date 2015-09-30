@@ -94,6 +94,7 @@ class ClientHandler(ConnectionHandler):
                 "Failed to verify response signature, server may be "
                 "improperly configured or we are experiencing MITM attack"
             )
+            self.debug("Returned headers: %s", self._remote_headers)
             sys.exit(1)
 
         if self.should_divert:
