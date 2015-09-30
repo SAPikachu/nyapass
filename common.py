@@ -320,6 +320,7 @@ class ConnectionHandler:
     def __init__(self, reader, writer, config):
         self.config = config
         self.init_logging()
+        self._num_handled_requests = 0
         self._reader = TeeStreamReader(reader)
         self._writer = writer
         self._active_writers = []
@@ -366,6 +367,7 @@ class ConnectionHandler:
         try:
             while True:
                 yield from self.handle_one_request()
+                self._num_handled_requests += 1
         finally:
             self.destroy_remote_connection()
             safe_close(self._writer)
@@ -864,6 +866,19 @@ class ConnectionHandler:
         self.destroy_remote_connection()
         [safe_close(x) for x in self._active_writers]
 
+    def dump_info(self):
+        self.debug("Dumping info:")
+        self.debug("Local: %s, %s", self._reader, self._writer)
+        self.debug("Remote: %s (%s)",
+                   self._remote_conn,
+                   self.connected_remote_endpoint)
+        self.debug("Is active: %s", self.is_active)
+        self.debug("Active writers: %s", self._active_writers)
+        self.debug("Local headers: %s", self._local_headers)
+        self.debug("Remote headers: %s", self._remote_headers)
+        self.debug("Number of handled requests: %s",
+                   self._num_handled_requests)
+
 
 class Nyapass:
     def __init__(self, handler_factory, config):
@@ -948,8 +963,15 @@ def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
         instance.close_all()
 
         loop.run_until_complete(server.wait_closed())
-        while instance.has_active_connection:
+        for i in range(20):
+            if not instance.has_active_connection:
+                break
+
             loop.run_until_complete(asyncio.sleep(0.1))
+        else:
+            log.warning("Some connections are not properly closed")
+            for handler in instance.active_handlers:
+                handler.dump_info()
 
         loop.stop()
         if disable_pending_task_warnings:
