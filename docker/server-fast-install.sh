@@ -87,4 +87,8 @@ main() {
     exit 0
 }
 
-main
+if [ "${1:-}" == "--auto" ]; then
+    { while true; do echo ""; done } | main
+else
+    main
+fi
