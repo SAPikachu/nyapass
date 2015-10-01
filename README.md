@@ -18,7 +18,7 @@ Ask Mr. Fang please.
 
 ## Quick start (Ubuntu or other Debian-based system)
 
-Run following commands, and follow script guidence to setup nyapass server in minutes:
+Run following commands, and follow script guidance to setup nyapass server in minutes:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl # Not needed if curl is already installed
