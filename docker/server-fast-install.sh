@@ -91,7 +91,10 @@ main() {
 }
 
 if [ "${1:-}" == "--auto" ]; then
-    { while true; do echo ""; done } | main
+    {
+        set -eu
+        while true; do echo "" 2>/dev/null || break; done
+    } | main
 else
     main
 fi
