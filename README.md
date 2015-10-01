@@ -16,7 +16,27 @@ Ask Mr. Fang please.
 * Tested on Ubuntu 15.04, should work on most Linux/FreeBSD systems that are reasonably updated
 * Client tested on Windows 7 with Python 3.5
 
-## Quick start (server)
+## Quick start (Ubuntu or other Debian-based system)
+
+Run following commands, and follow script guidence to setup nyapass server in minutes:
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl # Not needed if curl is already installed
+mkdir -p ~/nyapass-server && cd ~/nyapass-server
+curl -sSL https://raw.githubusercontent.com/SAPikachu/nyapass/master/docker/server-fast-install.sh > server-fast-install.sh
+sudo bash ./server-fast-install.sh
+```
+
+The script will:
+
+1. Generate `config.json` in `~/nyapass-server` if it doesn't exist.
+2. Generate a self-signed certificate if `nyapass-server.crt` doesn't exist in `~/nyapass-server`.
+3. Install Docker if it is not already installed.
+4. Create and run docker container for `nyapass-server`, which listens on port 443.
+
+To upgrade nyapass server to latest version, just rerun above commands. Existing configuration will be preserved during upgrade.
+
+## Manual installation (server)
 
 1. Ensure version of Python is at least 3.4:
     ```
@@ -29,6 +49,7 @@ Ask Mr. Fang please.
     git clone https://github.com/SAPikachu/nyapass.git
     cd nyapass
     ```
+    Alternatively, download and extract zipball/tarball from [the project page](https://github.com/SAPikachu/nyapass/).
 
 3. Install required packages:
     ```
@@ -52,9 +73,9 @@ Ask Mr. Fang please.
 
 7. Configuration of server side is done at this point, run `./nyapass-server.py` to start the server. (You may need to use `sudo` in order to listen on port 443)
 
-## Quick start (client)
+## Manual installation (client)
 
-1. Refer to step 1 ~ 3 of `Quick start (server)` to install.
+1. Refer to step 1 ~ 3 of `Manual installation (server)` to setup.
 
 2. Copy `config.json.example` to `config.json`, and edit it.
 
