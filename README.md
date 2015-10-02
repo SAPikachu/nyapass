@@ -7,6 +7,7 @@ Ask Mr. Fang please.
 ## Features
 * Standard non-caching HTTP proxy with CONNECT support.
 * Socks5 support.
+* Client can act as a shadowsocks server, so we can deploy it to a server inside China to provide secure forwarding service.
 * Run as standalone proxy, or delegate requests to another HTTP proxy (like polipo or squid)
 * Communication is done in HTTPS, making it hard to detect.
 * Act as an innocent HTTPS website to unauthorized clients.
