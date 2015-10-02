@@ -156,6 +156,17 @@ class ClientHandlerManager:
             **kwargs
         )
 
+    @property
+    def __name__(self):
+        return "%s(%s)" % (
+            self.__class__.__name__,
+            getattr(
+                self._handler_cls,
+                "__name__",
+                str(self._handler_cls),
+            ),
+        )
+
     def _read_known_hosts(self):
         if not os.path.isfile(self.config.known_hosts_file):
             return
@@ -239,9 +250,12 @@ def create_ssl_ctx(config):
     return ctx
 
 
-def main(config):
+def main(config, handler_cls=ClientHandler):
     logging.basicConfig(level=config.log_level)
     nyapass_run(
-        handler_factory=ClientHandlerManager(config),
+        handler_factory=ClientHandlerManager(
+            config,
+            handler_cls=handler_cls,
+        ),
         config=config,
     )

@@ -6,6 +6,7 @@
     "pbkdf2_rounds": 100000,
     "client": {
         "port": 3333,
+        "socks5_port": 3334,
         "listen_host": "0.0.0.0",
         "server_host": "127.0.0.1",
         "server_port": 443,

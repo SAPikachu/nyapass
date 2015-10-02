@@ -476,11 +476,15 @@ class ConnectionHandler:
         yield from self.send_response()
 
     @asyncio.coroutine
+    def send_response_headers(self):
+        assert self._remote_headers
+        self._writer.write(self._remote_headers)
+
+    @asyncio.coroutine
     def send_response(self):
         assert self._writer
-        assert self._remote_headers
         self.debug("send_response")
-        self._writer.write(self._remote_headers)
+        yield from self.send_response_headers()
         if self.is_tunnel_request:
             self.debug("Is tunnel request")
             yield from self.run_tunnel()
@@ -541,7 +545,7 @@ class ConnectionHandler:
         if process_response:
             yield from self.process_response()
 
-        self._writer.write(self._remote_headers)
+        yield from self.send_response_headers()
         if body and self.request_verb != b"HEAD":
             self._writer.write(body)
 
@@ -630,7 +634,7 @@ class ConnectionHandler:
         while (100 <= self.response_code <= 199 and
                self.response_code != 101):
             self.debug("Forwarding status %s", self.response_code)
-            self._writer.write(self._remote_headers)
+            yield from self.send_response_headers()
             yield from self._writer.drain()
             self._remote_headers = None
             yield from self.read_remote_headers(auto_handle_10x=False)
@@ -881,9 +885,13 @@ class ConnectionHandler:
 
 
 class Nyapass:
-    def __init__(self, handler_factory, config):
+    def __init__(
+        self, handler_factory, config, listener_ssl_ctx=None, port=None,
+    ):
         self._handler_factory = handler_factory
         self.config = config
+        self.listener_ssl_ctx = listener_ssl_ctx
+        self.port = port
         self.log = log.getChild(self.__class__.__name__)
         self.active_handlers = []
 
@@ -915,6 +923,41 @@ class Nyapass:
     def has_active_connection(self):
         return bool(self.active_handlers)
 
+    @asyncio.coroutine
+    def init(self):
+        config = self.config
+        self.server = yield from asyncio.start_server(
+            self.handle_connection,
+            host=config.listen_host,
+            port=self.port or config.port,
+            ssl=self.listener_ssl_ctx,
+        )
+        self.log.info(
+            "%s serving on %s",
+            getattr(
+                self._handler_factory,
+                "__name__",
+                str(self._handler_factory)
+            ),
+            self.server.sockets[0].getsockname(),
+        )
+
+    @asyncio.coroutine
+    def shutdown(self):
+        server = self.server
+        server.close()
+        yield from self.server.wait_closed()
+        self.close_all()
+        for i in range(20):
+            if not self.has_active_connection:
+                break
+
+            yield from asyncio.sleep(0.1)
+        else:
+            self.log.warning("Some connections are not properly closed")
+            for handler in self.active_handlers:
+                handler.dump_info()
+
 
 def detect_nt():
     import os
@@ -941,38 +984,27 @@ def setup_signal():
 
 
 def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
+    instance = Nyapass(
+        handler_factory=handler_factory,
+        config=config,
+        listener_ssl_ctx=listener_ssl_ctx,
+    )
+    nyapass_run_instances(instance)
+
+
+def nyapass_run_instances(*instances):
     detect_nt()
     setup_signal()
     loop = asyncio.get_event_loop()
-    instance = Nyapass(handler_factory=handler_factory, config=config)
-    coro = asyncio.start_server(
-        instance.handle_connection,
-        host=config.listen_host,
-        port=config.port,
-        loop=loop,
-        ssl=listener_ssl_ctx,
-    )
-    server = loop.run_until_complete(coro)
-
-    # Serve requests until CTRL+c is pressed
-    log.info("Serving on {}".format(server.sockets[0].getsockname()))
+    loop.run_until_complete(asyncio.gather(
+        *[x.init() for x in instances]
+    ))
 
     def _cleanup(disable_pending_task_warnings=False):
         # Close the server
-        server.close()
-        instance.close_all()
-
-        loop.run_until_complete(server.wait_closed())
-        for i in range(20):
-            if not instance.has_active_connection:
-                break
-
-            loop.run_until_complete(asyncio.sleep(0.1))
-        else:
-            log.warning("Some connections are not properly closed")
-            for handler in instance.active_handlers:
-                handler.dump_info()
-
+        loop.run_until_complete(asyncio.gather(
+            *[x.shutdown() for x in instances]
+        ))
         loop.stop()
         if disable_pending_task_warnings:
             [t.result() for t in Task.all_tasks()]
