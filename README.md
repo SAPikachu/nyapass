@@ -87,4 +87,4 @@ To upgrade nyapass server to latest version, just rerun above commands. Existing
     
     If you have certificate signed by trusted CA on your server, set `client.ssl_verify` to `true` to avoid MITM attack.
 
-3. Configuration of client side is done at this point, run `./nyapass-client.py` to start the client, then change browser proxy to host and port (default: 3333) of your client to make requests go through `nyapass`.
+3. Configuration of client side is done at this point, run `./nyapass-client.py` to start the client, then change browser proxy to host and port of your client (default: 3333) to make requests go through `nyapass`. Alternatively, you can also connect through Socks5 protocol (listens on port 3334 by default).
