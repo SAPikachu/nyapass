@@ -85,7 +85,10 @@ To upgrade nyapass server to latest version, just rerun above commands. Existing
     
     * `password`: For obvious reason.
     * `client.server_host` and `client.server_port`: Set this to host and port of your server.
+    * `client.shadowsocks_password`: Set this if you want to use a different password from the main password.
     
     If you have certificate signed by trusted CA on your server, set `client.ssl_verify` to `true` to avoid MITM attack.
 
 3. Configuration of client side is done at this point, run `./nyapass-client.py` to start the client, then change browser proxy to host and port of your client (default: 3333) to make requests go through `nyapass`. Alternatively, you can also connect through Socks5 protocol (listens on port 3334 by default).
+
+4. If client is deployed to a server, shadowsocks clients can connect to `client.shadowsocks_port` (3335 by default) to send traffic through `nyapass`. In this case, it is recommended to set `client.port` and `client.socks5_port` to `null` to disable HTTP and Socks handlers, so that only authenticated users can connect through your server.
