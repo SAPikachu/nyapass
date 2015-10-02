@@ -7,11 +7,14 @@
     "client": {
         "port": 3333,
         "socks5_port": 3334,
+        "shadowsocks_port": 3335,
         "listen_host": "0.0.0.0",
         "server_host": "127.0.0.1",
         "server_port": 443,
         "divert_banned_requests": true,
         "socks5_hijack_http": true,
+        "shadowsocks_password": null,
+        "shadowsocks_method": "aes-256-cfb",
         "ssl_verify": false,
         "pin_server_cert": true,
         "known_hosts_file": "~/.nyapass/known_hosts.json"
