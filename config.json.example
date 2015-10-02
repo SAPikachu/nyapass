@@ -11,6 +11,7 @@
         "server_host": "127.0.0.1",
         "server_port": 443,
         "divert_banned_requests": true,
+        "socks5_hijack_http": true,
         "ssl_verify": false,
         "pin_server_cert": true,
         "known_hosts_file": "~/.nyapass/known_hosts.json"
