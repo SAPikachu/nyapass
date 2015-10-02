@@ -6,6 +6,7 @@ Ask Mr. Fang please.
 
 ## Features
 * Standard non-caching HTTP proxy with CONNECT support.
+* Socks5 support.
 * Run as standalone proxy, or delegate requests to another HTTP proxy (like polipo or squid)
 * Communication is done in HTTPS, making it hard to detect.
 * Act as an innocent HTTPS website to unauthorized clients.
