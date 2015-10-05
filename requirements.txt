@@ -1,1 +1,2 @@
 py-radix
+shadowsocks
