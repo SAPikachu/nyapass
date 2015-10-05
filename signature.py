@@ -43,7 +43,7 @@ def sign_headers(config, headers):
         raise ValueError("Headers are not properly terminated")
 
     if b"\r\nX-Nyapass:" in headers:
-        raise ValueError("Headers already has signature")
+        raise ValueError("Headers already have signature")
 
     headers = headers[:-4]
     signature = compute_signature(config, headers)
