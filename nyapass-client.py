@@ -51,7 +51,7 @@ def main():
         logging.error("All handlers are disabled")
         sys.exit(1)
 
-    nyapass_run_instances(*instances)
+    nyapass_run_instances(config, *instances)
 
 
 if __name__ == "__main__":

@@ -989,13 +989,34 @@ def nyapass_run(handler_factory, config, listener_ssl_ctx=None):
         config=config,
         listener_ssl_ctx=listener_ssl_ctx,
     )
-    nyapass_run_instances(instance)
+    nyapass_run_instances(config, instance)
 
 
-def nyapass_run_instances(*instances):
+def nyapass_run_instances(config, *instances):
     detect_nt()
     setup_signal()
+    if config.use_custom_dns_resolver:
+        try:
+            from dns.resolver import (
+                Cache, get_default_resolver, override_system_resolver,
+            )
+        except ImportError:
+            log.warning(
+                "dnspython3 is not installed, "
+                "can't switch to custom resolver"
+            )
+        else:
+            resolver = get_default_resolver()
+            resolver.cache = Cache()
+            override_system_resolver(resolver)
+
     loop = asyncio.get_event_loop()
+    if config.threadpool_workers:
+        from concurrent.futures import ThreadPoolExecutor
+        loop.set_default_executor(ThreadPoolExecutor(
+            max_workers=config.threadpool_workers,
+        ))
+
     loop.run_until_complete(asyncio.gather(
         *[x.init() for x in instances]
     ))

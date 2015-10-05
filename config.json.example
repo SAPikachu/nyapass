@@ -4,6 +4,8 @@
     "salt": "caa26576-df30-4829-a84c-12b9bca8ea0e",
     "key_interval": 60,
     "pbkdf2_rounds": 100000,
+    "threadpool_workers": 64,
+    "use_custom_dns_resolver": true,
     "client": {
         "port": 3333,
         "socks5_port": 3334,
