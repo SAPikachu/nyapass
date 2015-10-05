@@ -1009,6 +1009,19 @@ def nyapass_run_instances(config, *instances):
             resolver = get_default_resolver()
             resolver.cache = Cache()
             override_system_resolver(resolver)
+            import socket
+            old_getaddrinfo = socket.getaddrinfo
+
+            def fixed_gai(
+                host, port, family=0, type=0, proto=0, flags=0, **kwargs
+            ):
+                # Workaround for different parameter name in dnspython
+                # (issue 123)
+                return old_getaddrinfo(
+                    host, port, family, type, proto, flags, **kwargs
+                )
+
+            socket.getaddrinfo = fixed_gai
 
     loop = asyncio.get_event_loop()
     if config.threadpool_workers:
