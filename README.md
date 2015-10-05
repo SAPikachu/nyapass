@@ -92,3 +92,7 @@ To upgrade nyapass server to latest version, just rerun above commands. Existing
 3. Configuration of client side is done at this point, run `./nyapass-client.py` to start the client, then change browser proxy to host and port of your client (default: 3333) to make requests go through `nyapass`. Alternatively, you can also connect through Socks5 protocol (listens on port 3334 by default).
 
 4. If client is deployed to a server, shadowsocks clients can connect to `client.shadowsocks_port` (3335 by default) to send traffic through `nyapass`. In this case, it is recommended to set `client.port` and `client.socks5_port` to `null` to disable HTTP and Socks handlers, so that only authenticated users can connect through your server.
+
+## Configuration options
+
+Please check [wiki](https://github.com/SAPikachu/nyapass/wiki/Configuration-options) for explanation of configuration options.
