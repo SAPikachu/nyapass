@@ -97,10 +97,10 @@ class ClientHandler(ConnectionHandler):
             sys.exit(1)
 
         if self.should_divert:
-            self._send_request_future.cancel()
+            fut = self._send_request_future
+            fut.cancel()
             yield from asyncio.sleep(0)
-            assert self._send_request_future.done()
-            self._send_request_future = None
+            assert fut.done()
 
             self.destroy_remote_connection()
             self._remote_headers = None
@@ -114,6 +114,8 @@ class ClientHandler(ConnectionHandler):
                 assert False  # Unreachable
 
             yield from self.ensure_remote_connection()
+            assert self._send_request_future == fut
+            self._send_request_future = None
             self.begin_send_request()
             yield from self.read_remote_headers()
 
