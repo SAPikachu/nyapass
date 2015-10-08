@@ -11,7 +11,7 @@ Ask Mr. Fang please.
 * Run as standalone proxy, or delegate requests to another HTTP proxy (like polipo or squid)
 * Communication is done in HTTPS, making it hard to detect.
 * Act as an innocent HTTPS website to unauthorized clients.
-* Integrated chnroutes support.
+* Integrated chnroutes-like functionality to access Chinese website directly from client, without routing through server.
 
 ## System requirement
 * Python 3.4+ (3.5+ on Windows)
