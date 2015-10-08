@@ -1008,6 +1008,9 @@ def nyapass_run_instances(config, *instances):
         else:
             resolver = get_default_resolver()
             resolver.cache = Cache()
+            if config.custom_nameservers:
+                resolver.nameservers = list(config.custom_nameservers)
+
             override_system_resolver(resolver)
             import socket
             old_getaddrinfo = socket.getaddrinfo
