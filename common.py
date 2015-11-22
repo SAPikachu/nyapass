@@ -12,6 +12,11 @@ import logging
 import re
 from urllib.parse import urlparse, urlsplit, urlunsplit
 from socket import IPPROTO_TCP, TCP_NODELAY
+try:
+    from socket import TCP_QUICKACK
+except ImportError:
+    # Not Linux?
+    TCP_QUICKACK = None
 
 HTTP_REQUEST_RE = re.compile(
     b"^([A-Z]+) ([^\r\n]+) [A-Z]+/[0-9].[0-9]\r\n",
@@ -79,6 +84,8 @@ def safe_close(obj):
 def enable_nodelay(writer):
     socket = writer.get_extra_info("socket")
     socket.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+    if TCP_QUICKACK:
+        socket.setsockopt(IPPROTO_TCP, TCP_QUICKACK, 1)
 
 
 @asyncio.coroutine
